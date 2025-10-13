@@ -15,8 +15,8 @@ update_os
 
 msg_info "Installing Kea 3.0 and PostgreSQL"
 $STD apt-get install -y postgresql postgresql-contrib jq curl >/dev/null
-# Debian package names for Kea (Debian 13)
-$STD apt-get install -y isc-kea-dhcp4-server isc-kea-dhcp6-server isc-kea-ctrl-agent isc-kea-admin >/dev/null
+# Assume meta-package availability on Debian 13
+$STD apt-get install -y isc-kea isc-kea-ctrl-agent isc-kea-admin >/dev/null
 msg_ok "Installed Kea and PostgreSQL"
 
 # Configure PostgreSQL DB and user for Kea
