@@ -44,6 +44,11 @@ msg_ok "Configured PostgreSQL"
 
 mkdir -p /etc/kea
 
+# Initialize Kea Config Backend schema (for Stork-managed config)
+msg_info "Initializing Kea Config Backend schema"
+kea-admin db-init pgsql -u ${KEA_DB_USER} -p ${KEA_DB_PASS} -n ${KEA_DB_NAME} -h 127.0.0.1 -P 5432 --config >/dev/null
+msg_ok "Initialized Config Backend"
+
 # Prompt or generate API password for ctrl-agent
 read -r -p "${TAB3}Enter Kea API password (blank to auto-generate): " KEA_API_PASS
 if [[ -z "${KEA_API_PASS}" ]]; then
@@ -65,6 +70,17 @@ cat >/etc/kea/kea-dhcp4.conf <<'JSON'
       "password": "__DB_PASSWORD__",
       "host": "127.0.0.1",
       "port": 5432
+    },
+    "config-control": {
+      "config-databases": [{
+        "type": "postgresql",
+        "name": "kea",
+        "user": "keauser",
+        "password": "__DB_PASSWORD__",
+        "host": "127.0.0.1",
+        "port": 5432
+      }],
+      "server-tag": "srv1"
     },
     "control-socket": { "socket-type": "unix", "socket-name": "/run/kea/kea4-ctrl-socket" },
     "valid-lifetime": 86400,
@@ -88,6 +104,17 @@ cat >/etc/kea/kea-dhcp6.conf <<'JSON'
       "password": "__DB_PASSWORD__",
       "host": "127.0.0.1",
       "port": 5432
+    },
+    "config-control": {
+      "config-databases": [{
+        "type": "postgresql",
+        "name": "kea",
+        "user": "keauser",
+        "password": "__DB_PASSWORD__",
+        "host": "127.0.0.1",
+        "port": 5432
+      }],
+      "server-tag": "srv1"
     },
     "control-socket": { "socket-type": "unix", "socket-name": "/run/kea/kea6-ctrl-socket" },
     "valid-lifetime": 86400,
