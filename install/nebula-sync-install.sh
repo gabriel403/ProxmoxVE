@@ -17,15 +17,10 @@ INSTALL_PATH="/opt/nebula-sync"
 ENV_PATH="/opt/nebula-sync/.env"
 SERVICE_PATH="/etc/systemd/system/nebula-sync.service"
 
-msg_info "Installing Dependencies"
-$STD apt install -y curl wget
-msg_ok "Installed Dependencies"
-
 msg_info "Downloading Nebula-Sync"
 mkdir -p "$INSTALL_PATH"
 cd "$INSTALL_PATH"
 
-# Get latest release
 LATEST_RELEASE=$(curl -fsSL https://api.github.com/repos/lovelaze/nebula-sync/releases/latest | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')
 ARCH=$(uname -m)
 case "$ARCH" in
@@ -35,7 +30,6 @@ case "$ARCH" in
   *) msg_error "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-# Download binary
 VERSION_NO_V="${LATEST_RELEASE#v}"
 BINARY_URL="https://github.com/lovelaze/nebula-sync/releases/download/${LATEST_RELEASE}/nebula-sync_${VERSION_NO_V}_linux_${ARCH}.tar.gz"
 curl -fSL -o nebula-sync.tar.gz "$BINARY_URL" || {
@@ -47,7 +41,6 @@ rm nebula-sync.tar.gz
 chmod +x nebula-sync
 msg_ok "Downloaded Nebula-Sync ${LATEST_RELEASE}"
 
-# Gather configuration from user
 echo ""
 echo -e "${BL}Nebula-Sync Configuration${CL}"
 echo "─────────────────────────────────────────"
@@ -55,13 +48,10 @@ echo "Enter details for your Pi-hole instances."
 echo "The Primary is your source instance, Replica will sync from it."
 echo ""
 
-# Primary instance
 echo -e "${YW}── Primary (Source) Pi-hole Instance ──${CL}"
 read -rp "${TAB3}Primary Pi-hole URL/IP (e.g., http://192.168.1.1 or 192.168.1.1): " PRIMARY_URL_INPUT
 PRIMARY_URL_INPUT="${PRIMARY_URL_INPUT:-http://192.168.1.1}"
-# Add http:// if no protocol specified
 [[ ! "$PRIMARY_URL_INPUT" =~ ^https?:// ]] && PRIMARY_URL_INPUT="http://${PRIMARY_URL_INPUT}"
-# Remove trailing slash
 PRIMARY_URL_INPUT="${PRIMARY_URL_INPUT%/}"
 read -rsp "${TAB3}Primary Pi-hole API Password: " PRIMARY_PASSWORD_INPUT
 echo ""
@@ -70,14 +60,11 @@ if [[ -z "$PRIMARY_PASSWORD_INPUT" ]]; then
   exit 1
 fi
 
-# Replica instance
 echo ""
 echo -e "${YW}── Replica Pi-hole Instance ──${CL}"
 read -rp "${TAB3}Replica Pi-hole URL/IP (e.g., http://192.168.1.2 or 192.168.1.2): " REPLICAS_URL_INPUT
 REPLICAS_URL_INPUT="${REPLICAS_URL_INPUT:-http://192.168.1.2}"
-# Add http:// if no protocol specified
 [[ ! "$REPLICAS_URL_INPUT" =~ ^https?:// ]] && REPLICAS_URL_INPUT="http://${REPLICAS_URL_INPUT}"
-# Remove trailing slash
 REPLICAS_URL_INPUT="${REPLICAS_URL_INPUT%/}"
 read -rsp "${TAB3}Replica Pi-hole API Password: " REPLICAS_PASSWORD_INPUT
 echo ""
@@ -86,7 +73,6 @@ if [[ -z "$REPLICAS_PASSWORD_INPUT" ]]; then
   exit 1
 fi
 
-# Sync options
 echo ""
 echo -e "${BL}Sync Options${CL}"
 echo "─────────────────────────────────────────"
@@ -168,21 +154,16 @@ if [[ "$SYNC_MODE" == "2" ]]; then
   [[ "$SYNC_GRAVITY_CLIENT_BY_GROUP" =~ ^[yY] ]] && SYNC_GRAVITY_CLIENT_BY_GROUP="true" || SYNC_GRAVITY_CLIENT_BY_GROUP="false"
 fi
 
-# Sync interval
 echo ""
 read -rp "${TAB3}Sync interval (cron expression, default: 0 */2 * * *): " SYNC_INTERVAL_INPUT
 SYNC_INTERVAL="${SYNC_INTERVAL_INPUT:-0 */2 * * *}"
 
 msg_info "Creating configuration"
-# Validate required variables are set
 if [[ -z "$PRIMARY_URL_INPUT" ]] || [[ -z "$PRIMARY_PASSWORD_INPUT" ]] || [[ -z "$REPLICAS_URL_INPUT" ]] || [[ -z "$REPLICAS_PASSWORD_INPUT" ]]; then
   msg_error "Missing required configuration values!"
   exit 1
 fi
 
-# nebula-sync expects PRIMARY and REPLICAS in format: http://hostname|password
-# Write .env file in the format nebula-sync expects
-# Use printf to safely handle special characters in passwords
 {
   printf "PRIMARY=%s|%s\n" "$PRIMARY_URL_INPUT" "$PRIMARY_PASSWORD_INPUT"
   printf "REPLICAS=%s|%s\n" "$REPLICAS_URL_INPUT" "$REPLICAS_PASSWORD_INPUT"
@@ -191,9 +172,8 @@ fi
   printf "CLIENT_SKIP_TLS_VERIFICATION=true\n"
 } > "$ENV_PATH"
 
-# Add individual sync flags if custom mode
 if [[ "$FULL_SYNC" == "false" ]]; then
-  cat <<EOF >>"$ENV_PATH"
+  cat <<EOF>>"$ENV_PATH"
 SYNC_CONFIG_DNS=${SYNC_CONFIG_DNS}
 SYNC_CONFIG_DHCP=${SYNC_CONFIG_DHCP}
 SYNC_CONFIG_NTP=${SYNC_CONFIG_NTP}
@@ -213,12 +193,10 @@ EOF
 fi
 
 chmod 600 "$ENV_PATH"
-# Verify .env file was created and has content
 if [[ ! -f "$ENV_PATH" ]] || [[ ! -s "$ENV_PATH" ]]; then
   msg_error "Failed to create .env file at $ENV_PATH"
   exit 1
 fi
-# Verify required variables are in the file
 if ! grep -q "^PRIMARY=" "$ENV_PATH" || ! grep -q "^REPLICAS=" "$ENV_PATH"; then
   msg_error ".env file is missing required variables"
   exit 1
@@ -226,7 +204,6 @@ fi
 msg_ok "Created configuration"
 
 msg_info "Creating wrapper script"
-# Create a wrapper script that properly sources the .env file
 cat <<'EOFWRAPPER' >"${INSTALL_PATH}/nebula-sync-wrapper.sh"
 #!/bin/bash
 set -e
@@ -254,7 +231,7 @@ chmod +x "${INSTALL_PATH}/nebula-sync-wrapper.sh"
 msg_ok "Created wrapper script"
 
 msg_info "Creating service"
-cat <<EOF >"$SERVICE_PATH"
+cat <<EOF>"$SERVICE_PATH"
 [Unit]
 Description=Nebula-Sync - Pi-hole Configuration Synchronization
 After=network.target
@@ -273,13 +250,9 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-
-# Verify the service can read the environment file
 msg_info "Verifying service configuration"
 if [[ -f "$ENV_PATH" ]]; then
-  # Test that environment variables can be loaded
-  set +u  # Allow unset variables for verification
+  set +u
   set -a
   source "$ENV_PATH" 2>/dev/null || true
   set +a
@@ -290,16 +263,15 @@ if [[ -f "$ENV_PATH" ]]; then
   else
     msg_ok "Environment variables verified"
   fi
-  set -u  # Re-enable unset variable checking
+  set -u
 else
   msg_error ".env file not found at $ENV_PATH"
   exit 1
 fi
 
-systemctl enable --now nebula-sync &>/dev/null
+systemctl enable -q --now nebula-sync
 msg_ok "Created and started service"
 
-# Create update script
 msg_info "Creating update script"
 cat <<'UPDATEEOF' >/usr/local/bin/update_nebula-sync
 #!/usr/bin/env bash
@@ -366,7 +338,6 @@ UPDATEEOF
 chmod +x /usr/local/bin/update_nebula-sync
 msg_ok "Created update script"
 
-# Save version for update checks
 echo "$LATEST_RELEASE" > "/opt/nebula-sync_version.txt"
 
 motd_ssh
